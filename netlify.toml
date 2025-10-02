@@ -1,0 +1,25 @@
+[build]
+  command = "npm run build"
+  functions = "netlify/functions"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[functions]]
+  path = "netlify/functions/*"
+  node_bundler = "esbuild"
+
+# Scheduled function for alerts every 2 minutes
+[[functions]]
+  path = "netlify/functions/send-alerts"
+  schedule = "*/2 * * * *"
+
+[functions.send-alerts.environment]
+  GROK_API_KEY = ""
+  DISCORD_WEBHOOK_URL = ""
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
