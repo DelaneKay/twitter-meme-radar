@@ -4,20 +4,14 @@
   publish = "out"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
 
-[[functions]]
-  path = "netlify/functions/*"
+[functions]
   node_bundler = "esbuild"
 
 # Scheduled function for alerts every 2 minutes
-[[functions]]
-  path = "netlify/functions/send-alerts"
+[functions."send-alerts"]
   schedule = "*/2 * * * *"
-
-[functions.send-alerts.environment]
-  GROK_API_KEY = ""
-  DISCORD_WEBHOOK_URL = ""
 
 [[redirects]]
   from = "/api/*"
