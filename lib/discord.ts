@@ -113,7 +113,7 @@ export class DiscordWebhook {
     }
 
     // Add tweet sources if available
-    if (tweetSources) {
+    if (tweetSources && embed.fields) {
       embed.fields.push({
         name: '🔗 Top Sources',
         value: tweetSources,
@@ -122,7 +122,7 @@ export class DiscordWebhook {
     }
 
     // Add contract address if available
-    if (coin.contract_address) {
+    if (coin.contract_address && embed.fields) {
       embed.fields.push({
         name: '📝 Contract',
         value: `\`${coin.contract_address}\``,
