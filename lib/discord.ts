@@ -27,10 +27,10 @@ export class DiscordWebhook {
     this.webhookUrl = webhookUrl
   }
 
-  async sendAlert(coin: Coin): Promise<boolean> {
+  async sendAlert(coin: Coin, window: string = '5m'): Promise<boolean> {
     try {
       const isPump = isPrePump(coin)
-      const message = this.formatAlertMessage(coin, isPump)
+      const message = this.formatAlertMessage(coin, isPump, window)
       
       const response = await fetch(this.webhookUrl, {
         method: 'POST',
@@ -52,7 +52,7 @@ export class DiscordWebhook {
     }
   }
 
-  private formatAlertMessage(coin: Coin, isPrePump: boolean): DiscordMessage {
+  private formatAlertMessage(coin: Coin, isPrePump: boolean, window: string = '5m'): DiscordMessage {
     const { counts, baseline, hype_score, reason_short, top_tweets } = coin
     
     // Calculate growth ratios
@@ -75,7 +75,7 @@ export class DiscordWebhook {
     const alertType = isPrePump ? '🚨 PRE-PUMP ALERT' : '📈 TRENDING'
     const color = isPrePump ? 0xFF4444 : 0x3B82F6 // Red for pre-pump, blue for trending
     
-    const title = `${alertType} • $${coin.symbol} (${coin.chain}) • ${coin.window_used || '5m'}`
+    const title = `${alertType} • $${coin.symbol} (${coin.chain}) • ${window}`
     
     const description = `**Hype Score:** ${(hype_score * 100).toFixed(0)}% | **Growth:** Tweets +${tweetGrowth}x, Authors +${authorGrowth}x | **Influence:** ${kolVerifiedCount} KOL+Verified\n\n**${reason_short}**`
 
@@ -135,7 +135,7 @@ export class DiscordWebhook {
     }
   }
 
-  async sendBatchAlert(coins: Coin[]): Promise<boolean> {
+  async sendBatchAlert(coins: Coin[], window: string = '5m'): Promise<boolean> {
     if (coins.length === 0) return true
 
     try {
@@ -144,7 +144,7 @@ export class DiscordWebhook {
 
       // Send pre-pump alerts first (higher priority)
       for (const coin of prePumpCoins) {
-        await this.sendAlert(coin)
+        await this.sendAlert(coin, window)
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 100))
       }
@@ -155,7 +155,7 @@ export class DiscordWebhook {
         .slice(0, 3)
 
       for (const coin of topTrending) {
-        await this.sendAlert(coin)
+        await this.sendAlert(coin, window)
         await new Promise(resolve => setTimeout(resolve, 100))
       }
 
@@ -221,10 +221,10 @@ export function getDiscordWebhook(): DiscordWebhook {
 }
 
 // Utility function for quick alerts
-export async function sendQuickAlert(coin: Coin): Promise<boolean> {
+export async function sendQuickAlert(coin: Coin, window: string = '5m'): Promise<boolean> {
   try {
     const discord = getDiscordWebhook()
-    return await discord.sendAlert(coin)
+    return await discord.sendAlert(coin, window)
   } catch (error) {
     console.error('Failed to send quick alert:', error)
     return false

@@ -61,7 +61,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     
     // Check multiple windows for comprehensive coverage
     const windows = ['1m', '5m', '15m'] as const
-    const allCoins: Coin[] = []
+    const allCoinsWithWindow: Array<{coin: Coin, window: string}> = []
     
     for (const window of windows) {
       try {
@@ -70,7 +70,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         const validatedData = validateGrokResponse(trendsData)
         
         if (validatedData.coins.length > 0) {
-          allCoins.push(...validatedData.coins)
+          allCoinsWithWindow.push(...validatedData.coins.map(coin => ({coin, window})))
           console.log(`Found ${validatedData.coins.length} coins in ${window} window`)
         }
       } catch (error) {
@@ -79,7 +79,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
     }
     
-    if (allCoins.length === 0) {
+    if (allCoinsWithWindow.length === 0) {
       console.log('No trending coins found across all windows')
       return {
         statusCode: 200,
@@ -92,28 +92,28 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
     
     // Remove duplicates (same symbol + chain combination)
-    const uniqueCoins = allCoins.reduce((acc, coin) => {
+    const uniqueCoinsWithWindow = allCoinsWithWindow.reduce((acc, {coin, window}) => {
       const key = `${coin.symbol}-${coin.chain}`
-      const existing = acc.find(c => `${c.symbol}-${c.chain}` === key)
+      const existing = acc.find(c => `${c.coin.symbol}-${c.coin.chain}` === key)
       
-      if (!existing || coin.hype_score > existing.hype_score) {
+      if (!existing || coin.hype_score > existing.coin.hype_score) {
         // Keep the coin with higher hype score
-        return [...acc.filter(c => `${c.symbol}-${c.chain}` !== key), coin]
+        return [...acc.filter(c => `${c.coin.symbol}-${c.coin.chain}` !== key), {coin, window}]
       }
       
       return acc
-    }, [] as Coin[])
+    }, [] as Array<{coin: Coin, window: string}>)
     
-    console.log(`Processing ${uniqueCoins.length} unique coins after deduplication`)
+    console.log(`Processing ${uniqueCoinsWithWindow.length} unique coins after deduplication`)
     
     // Separate pre-pump and trending coins
-    const prePumpCoins = uniqueCoins.filter(coin => {
+    const prePumpCoins = uniqueCoinsWithWindow.filter(({coin}) => {
       const isPump = isPrePump(coin)
       const shouldAlert = shouldSendAlert(coin)
       return isPump && shouldAlert
     })
     
-    const trendingCoins = uniqueCoins.filter(coin => {
+    const trendingCoins = uniqueCoinsWithWindow.filter(({coin}) => {
       const isPump = isPrePump(coin)
       const shouldAlert = shouldSendAlert(coin)
       return !isPump && shouldAlert && coin.hype_score >= 0.5 // Only alert on high hype trending coins
@@ -124,12 +124,12 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     let alertsSent = 0
     
     // Send pre-pump alerts (highest priority)
-    for (const coin of prePumpCoins) {
+    for (const {coin, window} of prePumpCoins) {
       try {
-        const success = await discord.sendAlert(coin)
+        const success = await discord.sendAlert(coin, window)
         if (success) {
           alertsSent++
-          console.log(`Sent pre-pump alert for ${coin.symbol} (${coin.chain})`)
+          console.log(`Sent pre-pump alert for ${coin.symbol} (${coin.chain}) from ${window} window`)
         }
         
         // Small delay to avoid rate limiting
@@ -141,15 +141,15 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     
     // Send trending alerts (limited to top 3 to avoid spam)
     const topTrending = trendingCoins
-      .sort((a, b) => b.hype_score - a.hype_score)
+      .sort((a, b) => b.coin.hype_score - a.coin.hype_score)
       .slice(0, 3)
     
-    for (const coin of topTrending) {
+    for (const {coin, window} of topTrending) {
       try {
-        const success = await discord.sendAlert(coin)
+        const success = await discord.sendAlert(coin, window)
         if (success) {
           alertsSent++
-          console.log(`Sent trending alert for ${coin.symbol} (${coin.chain})`)
+          console.log(`Sent trending alert for ${coin.symbol} (${coin.chain}) from ${window} window`)
         }
         
         await new Promise(resolve => setTimeout(resolve, 200))
@@ -159,10 +159,11 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
     
     // Send summary if no alerts were sent but coins were found
-    if (alertsSent === 0 && uniqueCoins.length > 0) {
-      const topCoin = uniqueCoins.sort((a, b) => b.hype_score - a.hype_score)[0]
+    if (alertsSent === 0 && uniqueCoinsWithWindow.length > 0) {
+      const topCoinWithWindow = uniqueCoinsWithWindow.sort((a, b) => b.coin.hype_score - a.coin.hype_score)[0]
+      const topCoin = topCoinWithWindow.coin
       await discord.sendSystemMessage(
-        `Monitoring ${uniqueCoins.length} coins. Top: $${topCoin.symbol} (${topCoin.chain}) with ${(topCoin.hype_score * 100).toFixed(0)}% hype score.`,
+        `Monitoring ${uniqueCoinsWithWindow.length} coins. Top: $${topCoin.symbol} (${topCoin.chain}) with ${(topCoin.hype_score * 100).toFixed(0)}% hype score.`,
         'info'
       )
     }
@@ -170,7 +171,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     const response = {
       message: `Alerts processing complete`,
       alertsSent,
-      coinsProcessed: uniqueCoins.length,
+      coinsProcessed: uniqueCoinsWithWindow.length,
       prePumpCount: prePumpCoins.length,
       trendingCount: trendingCoins.length,
       timestamp: new Date().toISOString(),
