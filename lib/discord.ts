@@ -4,7 +4,7 @@ interface DiscordEmbed {
   title: string
   description: string
   color: number
-  fields: Array<{
+  fields?: Array<{
     name: string
     value: string
     inline?: boolean
